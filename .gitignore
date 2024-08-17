@@ -1,0 +1,8 @@
+# Postgres mounted volume
+01-docker-terraform/ny_taxi_postgres_data/*
+
+# Virtual environment
+.venv/
+
+# Data files extensions
+*.csv*
