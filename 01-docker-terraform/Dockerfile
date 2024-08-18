@@ -40,3 +40,17 @@ ENTRYPOINT [ "python", "ingest_data.py" ]
 #         --db=ny_taxi \
 #         --table_name=yellow_taxi_trips \
 #         --url=${URL}
+
+
+# https://github.com/DataTalksClub/nyc-tlc-data/releases/download/misc/taxi_zone_lookup.csv
+
+# URL="https://github.com/DataTalksClub/nyc-tlc-data/archive/refs/tags/misc.tar.gz"
+# docker run -it \
+#         taxi_ingest:v001 \
+#         --user=root \
+#         --password=root \
+#         --host=pg-database \
+#         --port=5432 \
+#         --db=ny_taxi \
+#         --table_name=zones \
+#         --url=${URL}
