@@ -8,13 +8,14 @@ terraform {
 }
 
 provider "google" {
-  project = "friendly-idea-433003-e4"
-  region  = "us-central1"
+  credentials = file(var.credentials)
+  project     = "friendly-idea-433003-e4"
+  region      = "us-central1"
 }
 
 resource "google_storage_bucket" "de-course-bucket" {
   name          = "friendly-idea-433003-e4-de-course-bucket"
-  location      = "US"
+  location      = var.bq_location
   force_destroy = true
 
   lifecycle_rule {
@@ -25,4 +26,8 @@ resource "google_storage_bucket" "de-course-bucket" {
       type = "AbortIncompleteMultipartUpload"
     }
   }
+}
+
+resource "google_bigquery_dataset" "dataset" {
+  dataset_id = var.bq_dataset_name
 }
