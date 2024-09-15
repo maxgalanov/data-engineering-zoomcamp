@@ -31,7 +31,7 @@ TABLE_NAME = "green_taxi"
 
 PROJECT_ID = os.environ.get("GCP_PROJECT_ID")
 BUCKET = os.environ.get("GCP_GCS_BUCKET")
-GSP_TABLE_NAME = "green_taxi_{{ execution_date.strftime(\'%Y-%m\') }}"
+GSP_TABLE_NAME = "green_taxi_{{ execution_date.strftime(\'%Y-%m\') }}.parquet"
 
 
 def transform_data(input_file: str, output_file: str):
@@ -61,46 +61,69 @@ def transform_data(input_file: str, output_file: str):
     return
 
 
-def ingest_callable(user, password, host, port, db, schema_name, table_name, csv_file):
-    print(schema_name, table_name, csv_file)
+# def ingest_callable(user, password, host, port, db, schema_name, table_name, csv_file):
+#     print(schema_name, table_name, csv_file)
 
-    engine = create_engine(f'postgresql://{user}:{password}@{host}:{port}/{db}')
-    engine.connect()
+#     engine = create_engine(f'postgresql://{user}:{password}@{host}:{port}/{db}')
+#     engine.connect()
 
-    print("Connection established")
+#     print("Connection established")
 
-    df_iter = pd.read_csv(csv_file, iterator=True, chunksize=100_000)
+#     df_iter = pd.read_csv(csv_file, iterator=True, chunksize=100_000)
 
-    while True:
-        try:
-            start_time = time()
+#     while True:
+#         try:
+#             start_time = time()
 
-            df = next(df_iter)
+#             df = next(df_iter)
 
-            df.to_sql(name=table_name, con=engine, schema=schema_name, if_exists='append')
+#             df.to_sql(name=table_name, con=engine, schema=schema_name, if_exists='append')
 
-            end_time = time()
+#             end_time = time()
 
-            print(f"Inserted another chunk, took {end_time - start_time} seconds")
+#             print(f"Inserted another chunk, took {end_time - start_time} seconds")
             
-        except StopIteration:
-            print("Finished ingesting data into the postgres database")
-            break
+#         except StopIteration:
+#             print("Finished ingesting data into the postgres database")
+#             break
+
+def convert_csv_to_parquet(csv_file_path, parquet_file_path):
+    # Read CSV file into DataFrame
+    df = pd.read_csv(csv_file_path)
+    
+    df['lpep_pickup_datetime'] = pd.to_datetime(df['lpep_pickup_datetime'])
+    df['lpep_dropoff_datetime'] = pd.to_datetime(df['lpep_dropoff_datetime'])
+
+    # Convert DataFrame to Apache Arrow Table
+    table = pa.Table.from_pandas(df)
+    # Write Table to Parquet file
+    pq.write_table(table, parquet_file_path)
+
+
+def upload_to_gcs(bucket_name, source_file_name, destination_blob_name):
+    client = storage.Client()
+    bucket = client.bucket(bucket_name)
+    blob = bucket.blob(destination_blob_name)
+    blob.upload_from_filename(source_file_name)
+
+
+def delete_local_file(file_path):
+    if os.path.exists(file_path):
+        os.remove(file_path)
+        print(f"Deleted local file: {file_path}")
+    else:
+        print(f"File not found: {file_path}")
 
 
 def export_data_to_google_cloud_storage(file_name, bucket, catalog_name, table_name) -> None:
-    df = pd.read_csv(file_name)
-
-    table = pa.Table.from_pandas(df)
-
-    gcs = pa.fs.GcsFileSystem()
-
-    pq.write_to_dataset(
-        table,
-        root_path=f'{bucket}/{catalog_name}/{table_name}',
-        partition_cols=['lpep_pickup_date'],
-        filesystem=gcs
-    )
+    destination_blob_name = f'{catalog_name}/{table_name}'
+    local_parquet_path = file_name.rstrip(".csv") + '.parquet'
+    
+    convert_csv_to_parquet(file_name, local_parquet_path)
+    
+    upload_to_gcs(bucket, local_parquet_path, destination_blob_name)
+    
+    delete_local_file(local_parquet_path)
 
 
 default_args = {
@@ -138,21 +161,21 @@ with green_taxi_workflow:
         )
     )
 
-    # Upload trandformed data to postgres
-    ingest_postgres_task = PythonOperator(
-        task_id='ingest_postgres',
-        python_callable=ingest_callable,
-        op_kwargs = dict(
-            user=PG_USER,
-            password=PG_PASSWORD,
-            host=PG_HOST,
-            port=PG_PORT,
-            db=PG_DATABASE,
-            schema_name=PG_SCHEMA,
-            table_name=TABLE_NAME,
-            csv_file=TRANSFORMED_FILE
-        )
-    )
+    # # Upload trandformed data to postgres
+    # ingest_postgres_task = PythonOperator(
+    #     task_id='ingest_postgres',
+    #     python_callable=ingest_callable,
+    #     op_kwargs = dict(
+    #         user=PG_USER,
+    #         password=PG_PASSWORD,
+    #         host=PG_HOST,
+    #         port=PG_PORT,
+    #         db=PG_DATABASE,
+    #         schema_name=PG_SCHEMA,
+    #         table_name=TABLE_NAME,
+    #         csv_file=TRANSFORMED_FILE
+    #     )
+    # )
 
     # Upload trandformed data to postgres
     ingest_gcs_task = PythonOperator(
@@ -166,6 +189,6 @@ with green_taxi_workflow:
         )
     )
 
-
-    load_task >> transform_task >> ingest_postgres_task
-    transform_task >> ingest_gcs_task
+    load_task >> transform_task >> ingest_gcs_task
+    # load_task >> transform_task >> ingest_postgres_task
+    # transform_task >> ingest_gcs_task
