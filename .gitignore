@@ -6,7 +6,7 @@
 venv/
 
 # Data files extensions
-*.csv*
+# *.csv*
 *.json
 
 # Airflow logs and temporary files
