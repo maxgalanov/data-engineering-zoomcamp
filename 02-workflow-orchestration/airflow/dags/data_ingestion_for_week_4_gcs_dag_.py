@@ -38,6 +38,8 @@ def transform_data(input_file: str, output_file: str):
 
     df.rename(columns=lambda x: re.sub(r'([a-z0-9])([A-Z])', r'\1_\2', x).lower(), inplace=True)
 
+    df['ehail_fee'] = df['ehail_fee'].astype('float')
+
     assert 'vendor_id' in df.columns, "Column 'vendor_id' does not exist in the DataFrame."
     assert (df['passenger_count'] > 0).all(), "There are entries with passenger_count <= 0."
     assert (df['trip_distance'] > 0).all(), "There are entries with trip_distance <= 0."

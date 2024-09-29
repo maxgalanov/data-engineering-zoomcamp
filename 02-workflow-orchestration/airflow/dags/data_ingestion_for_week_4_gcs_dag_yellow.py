@@ -17,30 +17,32 @@ from google.cloud import storage
 
 AIRFLOW_HOME = os.environ.get("AIRFLOW_HOME", "/opt/airflow")
 URL_PREFIX = "https://d37ci6vzurychx.cloudfront.net/trip-data"
-URL = URL_PREFIX + "/fhv_tripdata_{{ execution_date.strftime(\'%Y-%m\') }}.parquet"
-OUTPUT_FILE = AIRFLOW_HOME + "/fhv_tripdata_{{ execution_date.strftime(\'%Y-%m\') }}.parquet"
+URL = URL_PREFIX + "/yellow_tripdata_{{ execution_date.strftime(\'%Y-%m\') }}.parquet"
+OUTPUT_FILE = AIRFLOW_HOME + "/yellow_tripdata_{{ execution_date.strftime(\'%Y-%m\') }}.parquet"
 TRANSFORMED_FILE = OUTPUT_FILE.rstrip(".parquet") +"_transformed.parquet"
 
-CATALOG_NAME = "fhv_tripdata"
+CATALOG_NAME = "yellow_tripdata"
 
 PROJECT_ID = os.environ.get("GCP_PROJECT_ID")
 BUCKET = os.environ.get("GCP_GCS_BUCKET")
-GSP_FILE_NAME = "fhv_{{ execution_date.strftime(\'%Y-%m\') }}.parquet"
+GSP_FILE_NAME = "yellow_taxi_{{ execution_date.strftime(\'%Y-%m\') }}.parquet"
 
 def transform_data(input_file: str, output_file: str):
     if input_file.endswith(".parquet"):
         df = pd.read_parquet(input_file)
     else:
         raise Exception("Only .parquet files could be proccesed")
+    
+    df = df[(df['passenger_count'] > 0) & (df['trip_distance'] > 0)]
 
     df.rename(columns=lambda x: re.sub(r'([a-z0-9])([A-Z])', r'\1_\2', x).lower(), inplace=True)
-    df.rename(columns={
-        "pulocation_id": "pu_location_id",
-        "dolocation_id": "do_location_id"
-    }, inplace=True)
-    
-    df['sr_flag'] = df['sr_flag'].astype('float')
-    
+
+    assert 'vendor_id' in df.columns, "Column 'vendor_id' does not exist in the DataFrame."
+    assert (df['passenger_count'] > 0).all(), "There are entries with passenger_count <= 0."
+    assert (df['trip_distance'] > 0).all(), "There are entries with trip_distance <= 0."
+
+    print("All assertions passed successfully!")
+
     table = pa.Table.from_pandas(df)
 
     pq.write_table(table, output_file)
@@ -82,8 +84,8 @@ default_args = {
     "retries": 1,
 }
 
-fhv_workflow = DAG(
-    dag_id="fhv_etl_2022",
+yellow_taxi_workflow = DAG(
+    dag_id="yellow_taxi_etl_2022",
     schedule_interval="0 6 2 * *",
     default_args=default_args,
     catchup=True,
@@ -91,7 +93,7 @@ fhv_workflow = DAG(
     tags=['de_zoomcamp', 'week_4']
 )
 
-with fhv_workflow:
+with yellow_taxi_workflow:
     
     # Downloading data from source
     load_task = BashOperator(
